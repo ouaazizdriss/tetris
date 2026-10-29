@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stacked tetrominoes inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- T piece -->
+    <path android:fillColor="#A855F7" android:pathData="M33,33h13v13h-13z M47,33h13v13h-13z M61,33h13v13h-13z M47,47h13v13h-13z" />
+    <!-- L piece -->
+    <path android:fillColor="#F97316" android:pathData="M33,47h13v13h-13z M33,61h13v13h-13z M47,61h13v13h-13z" />
+    <!-- I piece segment -->
+    <path android:fillColor="#22D3EE" android:pathData="M61,47h13v13h-13z M61,61h13v13h-13z" />
+</vector>
