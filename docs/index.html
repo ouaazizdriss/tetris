@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tetris for Android</title>
+<meta name="description" content="A lightweight Tetris game for Android in Kotlin with no third-party libraries: SRS rotation with wall kicks, 7-bag, ghost, hold, 3-piece preview and lock delay in a 49 KB APK. Play the rules engine in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tetris for Android">
+<meta property="og:description" content="Guideline rules in a 49 KB Kotlin APK with no third-party libraries. Play a faithful port of the rules engine in the browser.">
+<meta property="og:url" content="https://ouaazizdriss.github.io/tetris/">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0B0D14">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='33 33 42 42'%3E%3Cpath fill='%23A855F7' d='M33,33h13v13h-13z M47,33h13v13h-13z M61,33h13v13h-13z M47,47h13v13h-13z'/%3E%3Cpath fill='%23F97316' d='M33,47h13v13h-13z M33,61h13v13h-13z M47,61h13v13h-13z'/%3E%3Cpath fill='%2322D3EE' d='M61,47h13v13h-13z M61,61h13v13h-13z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: squared paper for the rules engine. Every sheet is ruled in board cells, section marks are the seven
+   tetrominoes in the app's own Canvas colours, and the dark theme is the app's own night palette from TetrisView.kt. */
+:root {
+  --paper: #f2f0e9; --sheet: #fbfaf6; --ink: #12141c; --sub: #535866; --faint: #7a7f8c; --rule: #d8d4c6; --rule-ink: #12141c;
+  --grid: rgba(48, 84, 150, .085); --accent: #6d28d9; --accent-soft: #ece3fb; --ok: #177a3e; --no: #b42318;
+  --well: #10131C; --well-top: #0B0D14; --well-bot: #161B2B; --well-grid: #1B2030; --well-panel: #141927; --well-edge: #262D40;
+  --well-label: #8B93A7; --well-value: #F1F5F9; --btn: #1A2032; --btn-accent: #26244A; --btn-pressed: #3A4566; --btn-edge: #2C3550; --icon: #E5E7EB;
+  --pI: #22D3EE; --pJ: #3B82F6; --pL: #F97316; --pO: #FACC15; --pS: #22C55E; --pT: #A855F7; --pZ: #EF4444;
+  --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --body: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --col: 1200px; --sq: 24px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0B0D14; --sheet: #10131C; --ink: #F1F5F9; --sub: #a3abbd; --faint: #8B93A7; --rule: #262D40; --rule-ink: #F1F5F9;
+  --grid: rgba(139, 147, 167, .07); --accent: #c9a2fb; --accent-soft: #26244A; --ok: #5fd68f; --no: #ff8a80; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #0B0D14; --sheet: #10131C; --ink: #F1F5F9; --sub: #a3abbd; --faint: #8B93A7; --rule: #262D40; --rule-ink: #F1F5F9;
+  --grid: rgba(139, 147, 167, .07); --accent: #c9a2fb; --accent-soft: #26244A; --ok: #5fd68f; --no: #ff8a80; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { color-scheme: light; scroll-padding-top: 70px }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden }
+a { color: var(--accent); text-underline-offset: 3px }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; font-optical-sizing: auto }
+h1 { font-size: clamp(40px, 6.2vw, 78px); line-height: .98; font-weight: 700; letter-spacing: -0.035em }
+h2 { font-size: clamp(30px, 4.2vw, 50px); line-height: 1.04; font-weight: 680; letter-spacing: -0.03em }
+h3 { font-size: 19px; line-height: 1.25; font-weight: 650; letter-spacing: -0.01em }
+p { margin: 0; max-width: 66ch }
+code, .mono, pre { font-family: var(--mono); font-size: .86em; font-variant-ligatures: none }
+:not(pre) > code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere }
+.lede { font-size: 19px; line-height: 1.55; color: var(--sub) }
+.sub { color: var(--sub) }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--paper); padding: 8px 12px; z-index: 99 }
+.skip:focus { left: 16px }
+
+/* Bands: sheets of squared paper */
+.band { padding: 92px max(16px, env(safe-area-inset-left, 0px)) 92px max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--rule) }
+.band.sheet { background-color: var(--sheet); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: var(--sq) var(--sq); background-position: center -1px }
+.wrap { max-width: var(--col); margin: 0 auto; display: flex; flex-direction: column; gap: 44px; min-width: 0 }
+
+/* Section head: a piece mark + the source location it documents */
+.head { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 18px 56px; align-items: end; border-top: 3px solid var(--rule-ink); padding-top: 18px }
+@media (max-width: 900px) { .head { grid-template-columns: minmax(0, 1fr) } }
+.loc { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: 12.5px; color: var(--faint); letter-spacing: .02em; min-width: 0 }
+.loc span { overflow-wrap: anywhere }
+.loc b { color: var(--ink); font-weight: 700; letter-spacing: .12em; white-space: nowrap }
+.mark { flex: none; width: 34px; height: 22px }
+
+/* Top bar */
+.top { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 0 max(16px, env(safe-area-inset-left, 0px)) }
+.top .in { max-width: var(--col); margin: 0 auto; height: 56px; display: flex; align-items: center; gap: 24px }
+.word { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: -0.02em; white-space: nowrap }
+.word svg { width: 24px; height: 24px }
+.nav { margin-left: auto; display: flex; gap: 20px; font-size: 14.5px }
+.nav a { color: var(--sub); text-decoration: none } .nav a:hover { color: var(--ink) }
+.gh { font-family: var(--mono); font-size: 12px; color: var(--ink); text-decoration: none; border: 1px solid var(--rule-ink); padding: 5px 10px; border-radius: 4px; white-space: nowrap }
+.gh:hover { background: var(--ink); color: var(--paper) }
+.theme { background: none; border: 1px solid var(--rule); color: var(--ink); width: 34px; height: 30px; border-radius: 4px; cursor: pointer; display: grid; place-items: center; padding: 0 }
+.theme svg { width: 16px; height: 16px }
+@media (max-width: 960px) { .nav { display: none } .gh { margin-left: auto } }
+
+/* Hero */
+.hero { padding-top: 64px; padding-bottom: 72px }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 56px; align-items: start }
+@media (max-width: 980px) { .hero .wrap { grid-template-columns: minmax(0, 1fr) } }
+.hero .copy { display: flex; flex-direction: column; gap: 26px; padding-top: 18px; min-width: 0 }
+.kicker { font-family: var(--mono); font-size: 12.5px; letter-spacing: .12em; color: var(--sub); font-weight: 700 }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center }
+.btn { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; font-size: 16px; padding: 12px 18px; border-radius: 6px; border: 1.5px solid var(--rule-ink); color: var(--ink); background: transparent }
+.btn.primary { background: var(--ink); color: var(--paper) }
+.btn.primary:hover { background: var(--accent); border-color: var(--accent) }
+.btn:not(.primary):hover { background: var(--accent-soft) }
+.btn small { font-family: var(--mono); font-weight: 500; font-size: 12px; opacity: .8 }
+.meta { font-family: var(--mono); font-size: 12.5px; color: var(--sub); line-height: 1.8 }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule-ink); border-left: 1px solid var(--rule) }
+.facts div { padding: 14px 14px 16px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); min-width: 0 }
+.facts b { display: block; font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1 }
+.facts span { display: block; font-size: 13.5px; color: var(--sub); line-height: 1.4; margin-top: 4px }
+@media (max-width: 620px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+
+/* The playable well */
+.device { position: relative; background: linear-gradient(180deg, var(--well-top), var(--well-bot)); border-radius: 18px; padding: 0 0 12px; box-shadow: 0 0 0 1px var(--well-edge), 0 24px 60px -24px rgba(11, 13, 20, .55); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; width: 100%; max-width: 440px; justify-self: center }
+.device:focus-visible { box-shadow: 0 0 0 3px var(--accent), 0 24px 60px -24px rgba(11, 13, 20, .55) }
+.device.live { box-shadow: 0 0 0 2px var(--pT), 0 24px 60px -24px rgba(11, 13, 20, .55) }
+.device canvas { display: block; width: 100%; touch-action: manipulation; cursor: pointer }
+.device.live canvas, .pad button { touch-action: none }
+.pad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 12px }
+.pad button { height: 56px; border-radius: 12px; border: 1.5px solid var(--btn-edge); background: var(--btn); color: var(--icon); display: grid; place-items: center; cursor: pointer; padding: 0; font: 700 12.5px/1 var(--body); letter-spacing: .1em }
+.pad button.acc { background: var(--btn-accent) }
+.pad button.on { background: var(--btn-pressed) }
+.pad button.wide { grid-column: span 2 }
+.pad svg { width: 26px; height: 26px; fill: var(--icon) }
+.pad button:focus-visible { outline: 2px solid var(--well-value); outline-offset: 1px }
+.gamebox { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.hint { font-size: 13.5px; color: var(--sub); max-width: 440px; justify-self: center; line-height: 1.5 }
+.hint kbd, .keys kbd { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--sheet); color: var(--ink); white-space: nowrap }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+
+/* Code */
+pre.code { margin: 0; background: var(--well); color: #d5dae4; border-radius: 10px; padding: 18px 0; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; border: 1px solid var(--well-edge); max-width: 100% }
+pre.code .ln { display: block; padding: 0 18px 0 0; white-space: pre }
+pre.code .ln::before { content: attr(data-n); display: inline-block; width: 46px; padding-right: 14px; text-align: right; color: #4B5263; user-select: none }
+pre.code .k { color: #c9a2fb } pre.code .n { color: #FACC15 } pre.code .c { color: #8B93A7; font-style: italic } pre.code .f { color: #67e8f9 }
+.figcap { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-top: 8px }
+
+/* Two-column text + figure */
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 48px; align-items: start }
+@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); gap: 32px } }
+.prose { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+.prose ul { margin: 0; padding-left: 20px; max-width: 64ch } .prose li { margin: 4px 0 }
+
+/* Architecture */
+.arch { display: grid; grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1.2fr) 112px minmax(0, 1fr); align-items: stretch }
+.node { border: 1.5px solid var(--rule-ink); background: var(--sheet); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.node.core { background: var(--well); color: var(--well-value); border-color: var(--pT) }
+.node.core .sub, .node.core li { color: #b6bdcc }
+.node .file { font-family: var(--mono); font-size: 12px; color: var(--faint) }
+.node.core .file { color: var(--well-label) }
+.node ul { margin: 0; padding-left: 18px; font-size: 14.5px; line-height: 1.5 }
+.wire { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px; color: var(--sub); text-align: center; line-height: 1.3; position: relative }
+.wire::before { content: ""; position: absolute; left: 6px; right: 6px; top: 50%; border-top: 1.5px dashed var(--faint) }
+.wire span { background: var(--paper); position: relative; padding: 2px 3px; overflow-wrap: anywhere }
+.sheet .wire span { background: var(--sheet) }
+@media (max-width: 900px) {
+  .arch { grid-template-columns: minmax(0, 1fr) }
+  .wire { flex-direction: row; min-height: 54px; gap: 10px }
+  .wire::before { left: 50%; right: auto; top: 4px; bottom: 4px; border-top: 0; border-left: 1.5px dashed var(--faint) }
+}
+.states { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 13px }
+.states .st { border: 1.5px solid var(--rule-ink); padding: 4px 10px; border-radius: 999px; background: var(--sheet) }
+.states .ar { color: var(--faint) }
+
+/* Rotation sheet */
+.rotgrid { display: grid; grid-template-columns: 34px repeat(4, minmax(0, 1fr)); gap: 6px 10px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--sub) }
+.rotgrid .hd { text-align: center; font-weight: 700; letter-spacing: .1em; color: var(--ink) }
+.rotgrid svg { width: 100%; max-width: 64px; height: auto; display: block; margin: 0 auto }
+.rotgrid .pn { font-weight: 700; color: var(--ink); font-size: 14px }
+
+/* Tables */
+.tbl-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--rule); border-radius: 8px; background: var(--sheet) }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+th { font-size: 11.5px; font-family: var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--sub); font-weight: 700; background: var(--paper) }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums }
+.kick td { font-family: var(--mono); font-size: 12.5px; white-space: nowrap }
+.kick td.t5 { color: var(--accent); font-weight: 700 }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap }
+.chip { font: 600 13.5px/1 var(--body); padding: 8px 12px; border-radius: 999px; border: 1.5px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer }
+.chip[aria-pressed="true"] { border-color: var(--rule-ink); background: var(--ink); color: var(--paper) }
+
+/* Kick lab */
+.lab { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 28px; align-items: start; border: 1.5px solid var(--rule-ink); border-radius: 10px; padding: 22px; background: var(--sheet) }
+@media (max-width: 760px) { .lab { grid-template-columns: minmax(0, 1fr) } }
+.lab canvas { width: 100%; display: block; border-radius: 8px; background: var(--well); box-shadow: 0 0 0 1px var(--well-edge) }
+.labctl { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px }
+.labctl button { font: 700 14px/1 var(--mono); min-width: 44px; height: 40px; border-radius: 8px; border: 1.5px solid var(--rule-ink); background: var(--paper); color: var(--ink); cursor: pointer; padding: 0 10px }
+.labctl button:hover { background: var(--accent-soft) }
+.log { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.log ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px }
+.log li { display: grid; grid-template-columns: 58px 96px minmax(0, 1fr); gap: 10px; align-items: center; font-family: var(--mono); font-size: 13px; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper) }
+.log li.ok { border-color: var(--ok); color: var(--ok); font-weight: 700 }
+.log li.no { color: var(--sub) } .log li.dim { opacity: .6 }
+.log .res { text-align: right }
+.labnote { font-size: 14.5px; color: var(--sub) }
+
+/* Bag */
+.bag { display: flex; flex-direction: column; gap: 10px }
+.bagrow { display: grid; grid-template-columns: 54px repeat(7, minmax(0, 1fr)); gap: 6px; align-items: center }
+.bagrow .lbl { font-family: var(--mono); font-size: 11.5px; color: var(--faint) }
+.bagrow .pc { aspect-ratio: 1.5; display: grid; place-items: center; border-radius: 6px; background: var(--well); border: 1px solid var(--well-edge) }
+.bagrow .pc svg { width: 70%; height: 70% }
+.stat { font-family: var(--mono); font-size: 13px; color: var(--sub) }
+
+/* Chart */
+.chart { position: relative; border: 1px solid var(--rule); border-radius: 8px; background: var(--sheet); padding: 16px 12px 8px }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible }
+.chart .ax { font-family: var(--mono); font-size: 10px; fill: var(--faint) }
+.chart .gl { stroke: var(--rule); stroke-width: 1 }
+.chart .bar { fill: var(--accent) } .chart .bar.soft { fill: var(--pI) }
+.chart .hit { fill: transparent; cursor: crosshair }
+.chart .hit:hover + .bar, .chart g.on .bar { opacity: .75 }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; transform: translate(-50%, -110%); transition: opacity .12s }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--sub); margin: 0 4px 8px }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px }
+details summary { cursor: pointer; font-size: 14px; color: var(--sub); margin-top: 10px }
+
+/* Controls */
+.ctlgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px }
+@media (max-width: 900px) { .ctlgrid { grid-template-columns: minmax(0, 1fr) } }
+.ctlgrid > div { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.minipad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; background: linear-gradient(180deg, var(--well-top), var(--well-bot)); padding: 12px; border-radius: 12px }
+.minipad span { height: 42px; border-radius: 9px; border: 1.5px solid var(--btn-edge); background: var(--btn); color: var(--icon); display: grid; place-items: center; font: 700 12px/1.1 var(--mono); text-align: center; letter-spacing: .04em }
+.minipad span.acc { background: var(--btn-accent) } .minipad span.wide { grid-column: span 2 }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 14.5px; align-items: baseline }
+.timings { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--rule-ink) }
+.timings div { padding: 14px 12px 4px 0; min-width: 0 }
+.timings b { display: block; font-family: var(--display); font-size: 26px; letter-spacing: -0.02em }
+.timings span { font-size: 13px; color: var(--sub); display: block; line-height: 1.4 }
+.timings code { font-size: 11.5px }
+@media (max-width: 760px) { .timings { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+
+/* Tests */
+.tests { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
+@media (max-width: 760px) { .tests { grid-template-columns: minmax(0, 1fr) } }
+.tests li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); align-items: baseline; font-size: 14.5px }
+.tests code { background: none; padding: 0; overflow-wrap: anywhere }
+.tests .n { font-family: var(--mono); font-size: 12px; color: var(--faint) }
+.tests .r { font-family: var(--mono); font-size: 12px; font-weight: 700 }
+.tests .r.pass { color: var(--ok) } .tests .r.fail { color: var(--no) }
+.runbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap }
+.runbar button { font: 600 15px/1 var(--body); padding: 11px 16px; border-radius: 6px; border: 1.5px solid var(--rule-ink); background: var(--ink); color: var(--paper); cursor: pointer }
+
+/* Install */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; counter-reset: s }
+@media (max-width: 900px) { .steps { grid-template-columns: minmax(0, 1fr) } }
+.steps > div { border-top: 3px solid var(--rule-ink); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.steps > div::before { counter-increment: s; content: "0" counter(s); font-family: var(--mono); font-size: 12px; color: var(--faint); font-weight: 700 }
+
+footer .wrap { flex-direction: row; justify-content: space-between; flex-wrap: wrap; gap: 16px; font-size: 14px; color: var(--sub) }
+footer a { color: var(--sub) }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important } }
+@media (max-width: 480px) { body { font-size: 16px } .band { padding-top: 64px; padding-bottom: 64px } .lab { padding: 14px } .pad button { height: 50px } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="in">
+    <a class="word" href="#top" aria-label="Tetris for Android, top of page">
+      <svg viewBox="33 33 42 42" aria-hidden="true"><path fill="#A855F7" d="M33,33h13v13h-13z M47,33h13v13h-13z M61,33h13v13h-13z M47,47h13v13h-13z"/><path fill="#F97316" d="M33,47h13v13h-13z M33,61h13v13h-13z M47,61h13v13h-13z"/><path fill="#22D3EE" d="M61,47h13v13h-13z M61,61h13v13h-13z"/></svg>
+      tetris
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#engine">Engine</a><a href="#rotation">Rotation</a><a href="#bag">7-bag</a><a href="#gravity">Gravity</a><a href="#scoring">Scoring</a><a href="#controls">Controls</a><a href="#install">Install</a>
+    </nav>
+    <a class="gh" href="https://github.com/ouaazizdriss/tetris">github</a>
+    <button class="theme" type="button" id="themeBtn" aria-label="Switch colour theme"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5v11a5.5 5.5 0 0 1 0-11z"/></svg></button>
+  </div>
+</header>
+
+<main id="main">
+<section class="band sheet hero" id="top" aria-labelledby="h-hero">
+  <div class="wrap">
+    <div class="copy">
+      <div class="kicker">ANDROID · KOTLIN · V1.0</div>
+      <h1 id="h-hero">Tetris for Android in 49&nbsp;KB, with the modern rules intact.</h1>
+      <p class="lede">SRS rotation with wall kicks, a 7-bag randomizer, ghost piece, hold, a three-piece preview and lock delay. Written in Kotlin with no third-party libraries: one Activity, one View, one rules class. The board on this page runs a line-for-line JavaScript port of that rules class.</p>
+      <div class="cta">
+        <a class="btn primary" id="apkLink" href="https://github.com/ouaazizdriss/tetris/releases/download/v1.0/tetris-1.0.apk">Download APK <small>tetris-1.0.apk · 49.2 KB</small></a>
+        <a class="btn" href="https://github.com/ouaazizdriss/tetris">Source on GitHub</a>
+      </div>
+      <div class="meta">Release v1.0, 29 Oct 2026 · Android 8.0+ (minSdk 26) · targetSdk 36 · portrait, full-screen</div>
+      <div class="facts" role="list">
+        <div role="listitem"><b>50,372</b><span>bytes in the v1.0 release APK</span></div>
+        <div role="listitem"><b>0</b><span>runtime dependencies; JUnit is test-only</span></div>
+        <div role="listitem"><b>1,095</b><span>lines of Kotlin across 3 source files</span></div>
+        <div role="listitem"><b>8 / 8</b><span>unit tests pass on the JVM and on this page</span></div>
+      </div>
+    </div>
+    <div class="gamebox">
+      <div class="device" id="device" tabindex="0" role="application" aria-roledescription="game" aria-label="Playable board. Press Enter to start. Arrows move, Up or X rotates clockwise, Z counter-clockwise, Space hard drops, C holds, P pauses." aria-describedby="gameHint">
+        <canvas id="game" aria-hidden="true"></canvas>
+        <div class="pad" id="pad">
+          <button type="button" data-c="HOLD" aria-label="Hold">HOLD</button>
+          <button type="button" data-c="SOFT_DROP" aria-label="Soft drop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 18 5.6 8.5h12.8z"/></svg></button>
+          <button type="button" data-c="HARD_DROP" class="acc" aria-label="Hard drop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14 5.5 5h13z M5 16.5h14V19H5z"/></svg></button>
+          <button type="button" data-c="ROTATE_CCW" aria-label="Rotate counter-clockwise"><svg viewBox="0 0 24 24" aria-hidden="true" style="transform:scaleX(-1)"><path d="M12 4.5a7.5 7.5 0 1 0 7.2 9.6l-2.2-.6A5.2 5.2 0 1 1 15.6 8l-2.4 2.3H20V3.5l-2.6 2.6A7.4 7.4 0 0 0 12 4.5z"/></svg></button>
+          <button type="button" data-c="LEFT" aria-label="Move left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12 16 5v14z"/></svg></button>
+          <button type="button" data-c="RIGHT" aria-label="Move right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 12 8 5v14z"/></svg></button>
+          <button type="button" data-c="ROTATE_CW" class="acc wide" aria-label="Rotate clockwise"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5a7.5 7.5 0 1 0 7.2 9.6l-2.2-.6A5.2 5.2 0 1 1 15.6 8l-2.4 2.3H20V3.5l-2.6 2.6A7.4 7.4 0 0 0 12 4.5z"/></svg></button>
+        </div>
+        <div class="sr" aria-live="polite" id="gameLive"></div>
+      </div>
+      <p class="hint" id="gameHint">Tap the board or press <kbd>Enter</kbd> to play. Keys only reach the game while it has focus: <kbd>←</kbd><kbd>→</kbd> move, <kbd>↓</kbd> soft drop, <kbd>↑</kbd>/<kbd>X</kbd> and <kbd>Z</kbd> rotate, <kbd>Space</kbd> hard drop, <kbd>C</kbd> hold, <kbd>P</kbd> pause. Clicking elsewhere or scrolling the board out of view pauses it, the way the app pauses in the background.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="engine" aria-labelledby="h-engine">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pT)" d="M1 0h1v1H1zM0 1h3v1H0z"/></svg><b>ENGINE</b><span>app/src/main/java/com/ouaaziz/tetris/</span></div>
+      <h2 id="h-engine">The rules live in one class that never touches Android.</h2>
+      <p class="lede"><code>TetrisGame.kt</code> imports only <code>kotlin.math.pow</code> and <code>kotlin.random.Random</code>. It takes elapsed milliseconds and player actions, and reports events through a three-method listener. That is why it runs under plain JUnit, and why it ports to JavaScript without changes in logic.</p>
+    </div>
+    <div class="arch" role="group" aria-label="Architecture: MainActivity drives TetrisView, which drives TetrisGame">
+      <div class="node">
+        <h3>MainActivity</h3><div class="file">MainActivity.kt · 60 lines</div>
+        <ul><li>Full-screen, cutout-aware, keeps the screen on</li><li>Hides system bars; swipe shows them transiently</li><li><code>onResume</code> / <code>onPause</code> forward to the view</li></ul>
+      </div>
+      <div class="wire" aria-hidden="true"><span>resume()<br>pause()</span></div>
+      <div class="node">
+        <h3>TetrisView</h3><div class="file">TetrisView.kt · 730 lines</div>
+        <ul><li>Choreographer frame loop, delta clamped to 0–100 ms</li><li>Canvas drawing: board, ghost, hold, next, stats, popups</li><li>Touch gestures, 7 on-screen buttons with auto-repeat, keyboard</li><li>Best score in <code>SharedPreferences</code>, haptics on events</li></ul>
+      </div>
+      <div class="wire" aria-hidden="true"><span>update(dt)<br>move<br>rotate<br>softStep<br>hardDrop<br>hold</span></div>
+      <div class="node core">
+        <h3>TetrisGame</h3><div class="file">TetrisGame.kt · 305 lines</div>
+        <ul><li>10 × 20 board of piece ordinals</li><li>SRS rotation and kick tables</li><li>7-bag queue, hold, ghost row</li><li>Gravity, lock delay, scoring, levels</li><li>Listener: lines cleared, level up, game over</li></ul>
+      </div>
+    </div>
+    <div class="split">
+      <div class="prose">
+        <h3>Four states, one switch</h3>
+        <p class="sub">Every action method starts with <code>activePiece()</code>, which returns the piece only while the state is <code>PLAYING</code>. Pausing is therefore a single assignment: input and gravity both stop on their own.</p>
+        <div class="states" aria-label="Game states"><span class="st">READY</span><span class="ar">→ start() →</span><span class="st">PLAYING</span><span class="ar">⇄ pause() / resume() ⇄</span><span class="st">PAUSED</span></div>
+        <div class="states"><span class="st">PLAYING</span><span class="ar">→ spawn blocked or lock above row 0 →</span><span class="st">GAME_OVER</span></div>
+        <p class="sub">After a game over, the view ignores taps for 700 ms (<code>RESTART_GUARD_MS</code>) so a last hard drop does not restart the game by accident.</p>
+      </div>
+      <div>
+<pre class="code" data-start="214" aria-label="Source excerpt from TetrisGame.kt">private fun activePiece(): ActivePiece? = if (state == State.PLAYING) current else null</pre>
+<pre class="code" data-start="200" style="margin-top:12px" aria-label="Source excerpt from TetrisGame.kt">internal fun spawn(type: Tetromino) {
+    val p = ActivePiece(type, (COLS - type.size) / 2, if (type == Tetromino.I) -1 else 0, 0)
+    gravityAccum = 0f
+    lockTimer = 0f
+    lockResets = 0
+    lowestY = p.y
+    if (!fits(p.type, p.x, p.y, p.rotation)) {
+        current = null
+        gameOver()
+        return
+    }
+    current = p
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 214 and 200–212</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band sheet" id="rotation" aria-labelledby="h-rot">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pI)" d="M0 .5h4v1H0z"/></svg><b>ROTATION</b><span>TetrisGame.kt · lines 14–25, 140–159, 283–303</span></div>
+      <h2 id="h-rot">Four orientations from one spawn shape, and five chances to fit.</h2>
+      <p class="lede">Each piece is declared once, in its SRS spawn orientation inside a square box. The other three states come from rotating the box clockwise: a cell at (x, y) moves to (size − 1 − y, x). A rotation then tries up to five offsets from the SRS kick table and keeps the first one that fits.</p>
+    </div>
+    <div class="split">
+      <div>
+<pre class="code" data-start="14" aria-label="Source excerpt from TetrisGame.kt">enum class Tetromino(val color: Int, val size: Int, spawn: List&lt;Cell&gt;) {
+    I(0xFF22D3EE.toInt(), 4, cells(0, 1, 1, 1, 2, 1, 3, 1)),
+    J(0xFF3B82F6.toInt(), 3, cells(0, 0, 0, 1, 1, 1, 2, 1)),
+    L(0xFFF97316.toInt(), 3, cells(2, 0, 0, 1, 1, 1, 2, 1)),
+    O(0xFFFACC15.toInt(), 2, cells(0, 0, 1, 0, 0, 1, 1, 1)),
+    S(0xFF22C55E.toInt(), 3, cells(1, 0, 2, 0, 0, 1, 1, 1)),
+    T(0xFFA855F7.toInt(), 3, cells(1, 0, 0, 1, 1, 1, 2, 1)),
+    Z(0xFFEF4444.toInt(), 3, cells(0, 0, 1, 0, 1, 1, 2, 1));
+
+    val rotations: List&lt;List&lt;Cell&gt;&gt; =
+        generateSequence(spawn) { cur -&gt; cur.map { Cell(size - 1 - it.y, it.x) } }.take(4).toList()
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 14–25. The colours are the ones drawn on screen.</div>
+      </div>
+      <div class="prose">
+        <h3>The rotation sheet, generated from that one line</h3>
+        <div class="rotgrid" id="rotgrid" role="img" aria-label="All four rotation states of the seven pieces, generated by the ported rotations function"></div>
+        <p class="sub">The O piece is never rotated: <code>rotate()</code> returns false for it before looking at a table.</p>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="prose">
+        <h3>The kick tables</h3>
+        <p class="sub">Two tables, keyed by <code>from * 4 + to</code>: one for J, L, S, T and Z, one for I. Each row holds five (x, y) tests, written y-up as in the SRS specification. The board grows downward, so the code flips the sign: <code>val ky = -kicks[i + 1]</code>. Eight transitions per table, five tests each: 80 offsets.</p>
+        <div class="tabs" role="group" aria-label="Kick table">
+          <button class="chip" type="button" data-kt="JLSTZ" aria-pressed="true">J L S T Z</button>
+          <button class="chip" type="button" data-kt="I" aria-pressed="false">I</button>
+        </div>
+        <div class="tbl-wrap"><table class="kick" id="kickTable"><caption class="sr">SRS wall kick offsets</caption></table></div>
+      </div>
+      <div>
+<pre class="code" data-start="140" aria-label="Source excerpt from TetrisGame.kt">fun rotate(direction: Int): Boolean {
+    val p = activePiece() ?: return false
+    if (p.type == Tetromino.O) return false
+    val to = (p.rotation + direction).mod(4)
+    val table = if (p.type == Tetromino.I) I_KICKS else JLSTZ_KICKS
+    val kicks = table.getValue(p.rotation * 4 + to)
+    for (i in kicks.indices step 2) {
+        // Kick tables are written y-up, the board is y-down.
+        val kx = kicks[i]
+        val ky = -kicks[i + 1]
+        if (fits(p.type, p.x + kx, p.y + ky, to)) {
+            p.x += kx
+            p.y += ky
+            p.rotation = to
+            onManipulated(p)
+            return true
+        }
+    }
+    return false
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 140–159</div>
+      </div>
+    </div>
+
+    <div class="prose">
+      <h3>Kick lab: watch the tests run</h3>
+      <p class="sub">The bottom eight rows of a board, driven by the same ported <code>rotate()</code>. Gravity is off here. Rotate and the log lists every offset tried, in order, until one fits.</p>
+    </div>
+    <div class="lab">
+      <div>
+        <div class="tabs" role="group" aria-label="Scenario">
+          <button class="chip" type="button" data-sc="tsd" aria-pressed="true">T under an overhang</button>
+          <button class="chip" type="button" data-sc="wall" aria-pressed="false">I against the wall</button>
+        </div>
+        <canvas id="labCanvas" style="margin-top:12px" role="img" aria-label="Kick lab board"></canvas>
+        <div class="labctl" role="group" aria-label="Kick lab controls">
+          <button type="button" data-la="L" aria-label="Move left">←</button>
+          <button type="button" data-la="R" aria-label="Move right">→</button>
+          <button type="button" data-la="D" aria-label="Move down one row">↓</button>
+          <button type="button" data-la="CCW" aria-label="Rotate counter-clockwise">↺ Z</button>
+          <button type="button" data-la="CW" aria-label="Rotate clockwise">↻ X</button>
+          <button type="button" data-la="RESET">Reset</button>
+        </div>
+      </div>
+      <div class="log" aria-live="polite">
+        <div class="labnote" id="labNote"></div>
+        <ol id="labLog"></ol>
+        <div class="stat" id="labState"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="bag" aria-labelledby="h-bag">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pO)" d="M1 0h2v2H1z"/></svg><b>7-BAG</b><span>TetrisGame.kt · lines 64–65, 216–219</span></div>
+      <h2 id="h-bag">Seven pieces to a bag, shuffled, and the queue never runs dry.</h2>
+      <p class="lede">The queue is refilled with a shuffled copy of all seven tetrominoes whenever it holds three pieces or fewer, so the three-piece preview is always full. Within any bag every piece appears once, so at most 12 other pieces can come between two of the same kind.</p>
+    </div>
+    <div class="split">
+      <div class="prose">
+<pre class="code" data-start="216" aria-label="Source excerpt from TetrisGame.kt">private fun nextFromQueue(): Tetromino {
+    while (queue.size &lt;= PREVIEW) queue.addAll(Tetromino.entries.shuffled(random))
+    return queue.removeFirst()
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 216–219. <code>PREVIEW = 3</code>.</div>
+        <p class="sub">Hold swaps the current piece with the held one, or takes the next from the queue on the first hold. It is allowed once per piece: <code>canHold</code> goes false on hold and back to true when the next piece locks.</p>
+      </div>
+      <div class="bag">
+        <div class="bag" id="bagView" aria-label="Pieces dealt by the ported nextFromQueue, four bags"></div>
+        <div class="runbar"><button type="button" id="dealBtn">Deal 28 again</button><span class="stat" id="bagStat"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band sheet" id="gravity" aria-labelledby="h-grav">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pL)" d="M2 0h1v1H2zM0 1h3v1H0z"/></svg><b>GRAVITY</b><span>TetrisGame.kt · lines 93–118, 187–188, 221–234</span></div>
+      <h2 id="h-grav">The guideline curve, from one row a second to one row a millisecond.</h2>
+      <p class="lede">Gravity is the guideline formula (0.8 − (level − 1) × 0.007)<sup>level − 1</sup> seconds per row, floored at 1 ms. Holding soft drop runs gravity twenty times faster, but never faster than 16 ms per row, and never slower than normal gravity.</p>
+    </div>
+    <div class="split">
+      <div class="prose">
+<pre class="code" data-start="187" aria-label="Source excerpt from TetrisGame.kt">fun gravityIntervalMs(): Float =
+    ((0.8 - (level - 1) * 0.007).pow(level - 1) * 1000).toFloat().coerceAtLeast(1f)</pre>
+<pre class="code" data-start="97" aria-label="Source excerpt from TetrisGame.kt">val gravity = gravityIntervalMs()
+val interval = if (softDropping) minOf(gravity, maxOf(gravity / 20f, 16f)) else gravity</pre>
+        <div class="figcap">TetrisGame.kt, lines 187–188 and 97–98</div>
+        <h3 style="margin-top:12px">Lock delay: 500 ms, 15 resets</h3>
+        <p class="sub">Once a piece cannot fall, a 500 ms timer runs. A successful move or rotation resets it, up to 15 times. Reaching a new lowest row clears that count, so a piece that keeps sinking can keep sliding; one that spins in place locks.</p>
+<pre class="code" data-start="221" aria-label="Source excerpt from TetrisGame.kt">private fun trackLowest(p: ActivePiece) {
+    if (p.y &gt; lowestY) {
+        lowestY = p.y
+        lockResets = 0
+    }
+}
+
+private fun onManipulated(p: ActivePiece) {
+    trackLowest(p)
+    if (lockTimer &gt; 0f &amp;&amp; lockResets &lt; MAX_LOCK_RESETS) {
+        lockTimer = 0f
+        lockResets++
+    }
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 221–234</div>
+      </div>
+      <div class="prose">
+        <h3>Milliseconds per row, by level</h3>
+        <div class="chart" id="gravChart">
+          <div class="legend"><span><i style="background:var(--accent)"></i>Gravity</span><span><i style="background:var(--pI)"></i>With soft drop held</span></div>
+          <div class="tip" id="gravTip" role="status"></div>
+        </div>
+        <details><summary>Show as a table</summary><div class="tbl-wrap" style="margin-top:10px"><table id="gravTable"><caption class="sr">Gravity interval by level</caption></table></div></details>
+        <p class="sub">Computed by the ported <code>gravityIntervalMs()</code>. The level is 1 + lines / 10, so level 20 arrives at 190 lines. From level 19 on the 1 ms floor applies: about 16 rows per 60 Hz frame.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="scoring" aria-labelledby="h-score">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pS)" d="M1 0h2v1H1zM0 1h2v1H0z"/></svg><b>SCORING</b><span>TetrisGame.kt · lines 104, 133, 164, 248–263, 281</span></div>
+      <h2 id="h-score">Points for lines, times the level, plus every row you drop.</h2>
+      <p class="lede">Line clears pay 100, 300, 500 or 800 times the current level. Each row of soft drop adds 1, each row of hard drop adds 2. The level rises every 10 lines. The best score is kept on the device.</p>
+    </div>
+    <div class="split">
+      <div class="tbl-wrap">
+        <table>
+          <caption class="sr">Scoring rules</caption>
+          <thead><tr><th>Event</th><th>On screen</th><th class="num">Points</th></tr></thead>
+          <tbody>
+            <tr><td>1 line</td><td>Single</td><td class="num">100 × level</td></tr>
+            <tr><td>2 lines</td><td>Double</td><td class="num">300 × level</td></tr>
+            <tr><td>3 lines</td><td>Triple</td><td class="num">500 × level</td></tr>
+            <tr><td>4 lines</td><td>TETRIS!</td><td class="num">800 × level</td></tr>
+            <tr><td>Soft drop, per row</td><td>key, gesture or held button</td><td class="num">+1</td></tr>
+            <tr><td>Hard drop, per row</td><td>to the ghost row</td><td class="num">+2</td></tr>
+            <tr><td>Level</td><td>popup “Level n”</td><td class="num">1 + lines / 10</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+<pre class="code" data-start="248" aria-label="Source excerpt from TetrisGame.kt">val full = (0 until ROWS).filter { r -&gt; board[r].all { it != 0 } }
+if (full.isNotEmpty()) {
+    val remaining = board.filterIndexed { r, _ -&gt; r !in full }.map { it.copyOf() }
+    for (r in 0 until ROWS) {
+        board[r] = if (r &lt; full.size) IntArray(COLS) else remaining[r - full.size]
+    }
+    val points = LINE_SCORES[full.size] * level
+    score += points
+    lines += full.size
+    val newLevel = 1 + lines / 10
+    listener?.onLinesCleared(full.size, points)
+    if (newLevel &gt; level) {
+        level = newLevel
+        listener?.onLevelUp(level)
+    }
+}</pre>
+        <div class="figcap">TetrisGame.kt, lines 248–263. Points use the level before the clear.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band sheet" id="controls" aria-labelledby="h-ctl">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pJ)" d="M0 0h1v1H0zM0 1h3v1H0z"/></svg><b>CONTROLS</b><span>TetrisView.kt · lines 185–415, 699–711</span></div>
+      <h2 id="h-ctl">Three ways in: gestures, buttons and a keyboard.</h2>
+      <p class="lede">Gestures work anywhere above the buttons. The buttons sit in two rows of four at the bottom, left thumb for movement and hold, right thumb for drops and rotation. A hardware keyboard works too.</p>
+    </div>
+    <div class="ctlgrid">
+      <div>
+        <h3>Touch</h3>
+        <div class="tbl-wrap"><table><caption class="sr">Touch gestures</caption><thead><tr><th>Gesture</th><th>Action</th></tr></thead><tbody>
+          <tr><td>Drag left / right</td><td>Move, one column per cell dragged</td></tr>
+          <tr><td>Drag down</td><td>Soft drop, one row per cell</td></tr>
+          <tr><td>Tap</td><td>Rotate clockwise (hold, if on the hold box)</td></tr>
+          <tr><td>Flick down</td><td>Hard drop</td></tr>
+          <tr><td>Flick up</td><td>Hold</td></tr>
+        </tbody></table></div>
+      </div>
+      <div>
+        <h3>On-screen buttons</h3>
+        <div class="minipad" aria-label="Button layout: top row hold, soft drop, hard drop, rotate counter-clockwise; bottom row left, right, rotate clockwise (double width)" role="img">
+          <span>HOLD</span><span>SOFT</span><span class="acc">HARD</span><span>↺</span>
+          <span>◀</span><span>▶</span><span class="acc wide">↻</span>
+        </div>
+        <p class="sub" style="font-size:14.5px">Left and right auto-repeat. Soft drop holds while pressed. Pause sits under the preview. Several fingers can press at once.</p>
+      </div>
+      <div>
+        <h3>Keyboard</h3>
+        <div class="keys">
+          <span><kbd>←</kbd> <kbd>→</kbd></span><span>Move</span>
+          <span><kbd>↓</kbd></span><span>Soft drop one row</span>
+          <span><kbd>↑</kbd> <kbd>X</kbd></span><span>Rotate clockwise</span>
+          <span><kbd>Z</kbd></span><span>Rotate counter-clockwise</span>
+          <span><kbd>Space</kbd></span><span>Hard drop; start or resume</span>
+          <span><kbd>C</kbd> <kbd>Shift</kbd></span><span>Hold</span>
+          <span><kbd>P</kbd> <kbd>Esc</kbd></span><span>Pause</span>
+          <span><kbd>Enter</kbd></span><span>Start or resume</span>
+        </div>
+      </div>
+    </div>
+    <div class="timings" role="list" aria-label="Input timings from TetrisView.kt">
+      <div role="listitem"><b>170 ms</b><span>delay before auto-repeat <code>DAS_MS</code></span></div>
+      <div role="listitem"><b>50 ms</b><span>between repeats <code>ARR_MS</code></span></div>
+      <div role="listitem"><b>250 ms</b><span>longest tap that rotates <code>TAP_MS</code></span></div>
+      <div role="listitem"><b>1200</b><span>dp/s to count as a flick <code>FLING_DP_PER_SEC</code></span></div>
+      <div role="listitem"><b>700 ms</b><span>tap guard after game over <code>RESTART_GUARD_MS</code></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="tests" aria-labelledby="h-tests">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pZ)" d="M0 0h2v1H0zM1 1h2v1H1z"/></svg><b>TESTS</b><span>app/src/test/java/com/ouaaziz/tetris/TetrisGameTest.kt</span></div>
+      <h2 id="h-tests">Eight tests pin the rules down. They run here too.</h2>
+      <p class="lede">The repository has eight JUnit tests for <code>TetrisGame</code>; <code>./gradlew testDebugUnitTest</code> runs them, and all eight pass. The same eight assertions are ported below and run against this page’s JavaScript engine, which is how the port is checked against the original.</p>
+    </div>
+    <ol class="tests" id="testList"></ol>
+    <div class="runbar"><button type="button" id="runTests">Run the 8 tests in this browser</button><span class="stat" id="testStat"></span></div>
+  </div>
+</section>
+
+<section class="band sheet" id="install" aria-labelledby="h-inst">
+  <div class="wrap">
+    <div class="head">
+      <div class="loc"><svg class="mark" viewBox="0 0 4 2" aria-hidden="true"><path fill="var(--pT)" d="M1 0h1v1H1zM0 1h3v1H0z"/></svg><b>INSTALL</b><span>README.md · app/build.gradle.kts</span></div>
+      <h2 id="h-inst">Install the APK, or build it yourself.</h2>
+      <p class="lede">The release build is minified and resource-shrunk with R8, which is how a Kotlin game with its own renderer fits in 49.2 KB.</p>
+    </div>
+    <div class="steps">
+      <div>
+        <h3>Download</h3>
+        <p class="sub">Get <a id="apkLink2" href="https://github.com/ouaazizdriss/tetris/releases/download/v1.0/tetris-1.0.apk">tetris-1.0.apk</a> (50,372 bytes) from the <a href="https://github.com/ouaazizdriss/tetris/releases">Releases page</a> on your phone.</p>
+      </div>
+      <div>
+        <h3>Allow and open</h3>
+        <p class="sub">Allow installing from unknown sources when Android asks, then open the file. Requires Android 8.0 or later.</p>
+      </div>
+      <div>
+        <h3>Play</h3>
+        <p class="sub">The game runs full-screen in portrait and pauses itself when it goes to the background.</p>
+      </div>
+    </div>
+    <div class="split">
+      <div class="prose">
+        <h3>Build from source</h3>
+        <p class="sub">Standard Gradle Android project: Kotlin targeting Java 17, compileSdk 36. Release signing reads a <code>keystore.properties</code> file at the project root that is not committed; without it the release APK is built unsigned.</p>
+      </div>
+      <div>
+<pre class="code nonum" aria-label="Build commands">./gradlew testDebugUnitTest   # game-logic unit tests
+./gradlew installDebug        # install debug build on a connected device
+./gradlew assembleRelease     # release APK (signed if keystore.properties exists)</pre>
+        <div class="figcap">README.md</div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="band" style="padding-top:40px;padding-bottom:40px">
+  <div class="wrap">
+    <span>Built by Driss OUAAZIZ · 2026</span>
+    <span><a href="https://github.com/ouaazizdriss/tetris">github.com/ouaazizdriss/tetris</a></span>
+  </div>
+</footer>
+
+<script>
+/* Line-for-line port of app/src/main/java/com/ouaaziz/tetris/TetrisGame.kt */
+const COLS = 10, ROWS = 20, PREVIEW = 3;
+const LOCK_DELAY_MS = 500, MAX_LOCK_RESETS = 15;
+const LINE_SCORES = [0, 100, 300, 500, 800];
+
+function cellsOf(...xy) { const out = []; for (let i = 0; i < xy.length; i += 2) out.push({ x: xy[i], y: xy[i + 1] }); return out; }
+
+function makeType(name, ordinal, color, size, spawn) {
+  const rotations = [spawn];
+  for (let i = 1; i < 4; i++) rotations.push(rotations[i - 1].map(c => ({ x: size - 1 - c.y, y: c.x })));
+  return { name, ordinal, color, size, rotations };
+}
+const Tetromino = [
+  makeType('I', 0, '#22D3EE', 4, cellsOf(0, 1, 1, 1, 2, 1, 3, 1)),
+  makeType('J', 1, '#3B82F6', 3, cellsOf(0, 0, 0, 1, 1, 1, 2, 1)),
+  makeType('L', 2, '#F97316', 3, cellsOf(2, 0, 0, 1, 1, 1, 2, 1)),
+  makeType('O', 3, '#FACC15', 2, cellsOf(0, 0, 1, 0, 0, 1, 1, 1)),
+  makeType('S', 4, '#22C55E', 3, cellsOf(1, 0, 2, 0, 0, 1, 1, 1)),
+  makeType('T', 5, '#A855F7', 3, cellsOf(1, 0, 0, 1, 1, 1, 2, 1)),
+  makeType('Z', 6, '#EF4444', 3, cellsOf(0, 0, 1, 0, 1, 1, 2, 1)),
+];
+const T_ = Object.fromEntries(Tetromino.map(t => [t.name, t]));
+
+// SRS wall kicks keyed by from * 4 + to, as flattened (x, y) pairs with y pointing up.
+const JLSTZ_KICKS = {
+  [0 * 4 + 1]: [0, 0, -1, 0, -1, 1, 0, -2, -1, -2],
+  [1 * 4 + 0]: [0, 0, 1, 0, 1, -1, 0, 2, 1, 2],
+  [1 * 4 + 2]: [0, 0, 1, 0, 1, -1, 0, 2, 1, 2],
+  [2 * 4 + 1]: [0, 0, -1, 0, -1, 1, 0, -2, -1, -2],
+  [2 * 4 + 3]: [0, 0, 1, 0, 1, 1, 0, -2, 1, -2],
+  [3 * 4 + 2]: [0, 0, -1, 0, -1, -1, 0, 2, -1, 2],
+  [3 * 4 + 0]: [0, 0, -1, 0, -1, -1, 0, 2, -1, 2],
+  [0 * 4 + 3]: [0, 0, 1, 0, 1, 1, 0, -2, 1, -2],
+};
+const I_KICKS = {
+  [0 * 4 + 1]: [0, 0, -2, 0, 1, 0, -2, -1, 1, 2],
+  [1 * 4 + 0]: [0, 0, 2, 0, -1, 0, 2, 1, -1, -2],
+  [1 * 4 + 2]: [0, 0, -1, 0, 2, 0, -1, 2, 2, -1],
+  [2 * 4 + 1]: [0, 0, 1, 0, -2, 0, 1, -2, -2, 1],
+  [2 * 4 + 3]: [0, 0, 2, 0, -1, 0, 2, 1, -1, -2],
+  [3 * 4 + 2]: [0, 0, -2, 0, 1, 0, -2, -1, 1, 2],
+  [3 * 4 + 0]: [0, 0, 1, 0, -2, 0, 1, -2, -2, 1],
+  [0 * 4 + 3]: [0, 0, -1, 0, 2, 0, -1, 2, 2, -1],
+};
+
+const mod4 = n => ((n % 4) + 4) % 4;
+function shuffled(arr, rnd) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+class TetrisGame {
+  constructor(random = Math.random) {
+    this.random = random;
+    this.listener = null;
+    this.board = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
+    this.state = 'READY';
+    this.current = null;
+    this.held = null;
+    this.canHold = true;
+    this.score = 0; this.lines = 0; this.level = 1;
+    this.softDropping = false;
+    this.queue = [];
+    this.gravityAccum = 0; this.lockTimer = 0; this.lockResets = 0; this.lowestY = 0;
+    this.onKick = null; // page-only hook: reports every kick test tried
+  }
+  get nextPieces() { return this.queue.slice(0, PREVIEW); }
+
+  start() {
+    this.board.forEach(r => r.fill(0));
+    this.queue = [];
+    this.held = null; this.canHold = true;
+    this.score = 0; this.lines = 0; this.level = 1;
+    this.softDropping = false;
+    this.state = 'PLAYING';
+    this.spawn(this.nextFromQueue());
+  }
+  pause() { if (this.state === 'PLAYING') this.state = 'PAUSED'; }
+  resume() { if (this.state === 'PAUSED') this.state = 'PLAYING'; }
+
+  update(dtMs) {
+    if (this.state !== 'PLAYING') return;
+    const p = this.current; if (!p) return;
+    const gravity = this.gravityIntervalMs();
+    const interval = this.softDropping ? Math.min(gravity, Math.max(gravity / 20, 16)) : gravity;
+    this.gravityAccum += dtMs;
+    while (this.gravityAccum >= interval) {
+      this.gravityAccum -= interval;
+      if (this.fits(p.type, p.x, p.y + 1, p.rotation)) {
+        p.y++;
+        if (this.softDropping) this.score += 1;
+        this.trackLowest(p);
+      } else { this.gravityAccum = 0; break; }
+    }
+    if (!this.fits(p.type, p.x, p.y + 1, p.rotation)) {
+      this.lockTimer += dtMs;
+      if (this.lockTimer >= LOCK_DELAY_MS) this.lockPiece();
+    } else {
+      this.lockTimer = 0;
+    }
+  }
+
+  move(dx) {
+    const p = this.activePiece(); if (!p) return false;
+    if (!this.fits(p.type, p.x + dx, p.y, p.rotation)) return false;
+    p.x += dx; this.onManipulated(p); return true;
+  }
+  softStep() {
+    const p = this.activePiece(); if (!p) return false;
+    if (!this.fits(p.type, p.x, p.y + 1, p.rotation)) return false;
+    p.y++; this.score += 1; this.gravityAccum = 0; this.trackLowest(p); return true;
+  }
+  rotate(direction) {
+    const p = this.activePiece(); if (!p) return false;
+    if (p.type === T_.O) return false;
+    const to = mod4(p.rotation + direction);
+    const table = p.type === T_.I ? I_KICKS : JLSTZ_KICKS;
+    const kicks = table[p.rotation * 4 + to];
+    const tried = [];
+    for (let i = 0; i < kicks.length; i += 2) {
+      // Kick tables are written y-up, the board is y-down.
+      const kx = kicks[i], ky = -kicks[i + 1];
+      const ok = this.fits(p.type, p.x + kx, p.y + ky, to);
+      tried.push({ kx: kicks[i], ky: kicks[i + 1], ok });
+      if (ok) {
+        const from = p.rotation;
+        p.x += kx; p.y += ky; p.rotation = to;
+        this.onManipulated(p);
+        if (this.onKick) this.onKick({ from, to, tried });
+        return true;
+      }
+    }
+    if (this.onKick) this.onKick({ from: p.rotation, to, tried });
+    return false;
+  }
+  hardDrop() {
+    const p = this.activePiece(); if (!p) return;
+    const target = this.ghostY();
+    this.score += 2 * (target - p.y);
+    p.y = target;
+    this.lockPiece();
+  }
+  hold() {
+    const p = this.activePiece(); if (!p) return false;
+    if (!this.canHold) return false;
+    const swap = this.held;
+    this.held = p.type; this.canHold = false;
+    this.spawn(swap || this.nextFromQueue());
+    return true;
+  }
+  ghostY() {
+    const p = this.current; if (!p) return 0;
+    let y = p.y;
+    while (this.fits(p.type, p.x, y + 1, p.rotation)) y++;
+    return y;
+  }
+  gravityIntervalMs() { return Math.max(Math.pow(0.8 - (this.level - 1) * 0.007, this.level - 1) * 1000, 1); }
+  fits(type, x, y, rotation) {
+    for (const c of type.rotations[rotation]) {
+      const bx = x + c.x, by = y + c.y;
+      if (bx < 0 || bx >= COLS || by >= ROWS) return false;
+      if (by >= 0 && this.board[by][bx] !== 0) return false;
+    }
+    return true;
+  }
+  spawn(type) {
+    const p = { type, x: Math.floor((COLS - type.size) / 2), y: type === T_.I ? -1 : 0, rotation: 0 };
+    this.gravityAccum = 0; this.lockTimer = 0; this.lockResets = 0; this.lowestY = p.y;
+    if (!this.fits(p.type, p.x, p.y, p.rotation)) { this.current = null; this.gameOver(); return; }
+    this.current = p;
+  }
+  cellsOf(p) { return p.type.rotations[p.rotation].map(c => ({ x: p.x + c.x, y: p.y + c.y })); }
+  activePiece() { return this.state === 'PLAYING' ? this.current : null; }
+  nextFromQueue() {
+    while (this.queue.length <= PREVIEW) this.queue.push(...shuffled(Tetromino, this.random));
+    return this.queue.shift();
+  }
+  trackLowest(p) { if (p.y > this.lowestY) { this.lowestY = p.y; this.lockResets = 0; } }
+  onManipulated(p) {
+    this.trackLowest(p);
+    if (this.lockTimer > 0 && this.lockResets < MAX_LOCK_RESETS) { this.lockTimer = 0; this.lockResets++; }
+  }
+  lockPiece() {
+    const p = this.current; if (!p) return;
+    let toppedOut = false;
+    for (const c of this.cellsOf(p)) { if (c.y < 0) toppedOut = true; else this.board[c.y][c.x] = p.type.ordinal + 1; }
+    this.current = null;
+    if (toppedOut) { this.gameOver(); return; }
+    const full = [];
+    for (let r = 0; r < ROWS; r++) if (this.board[r].every(v => v !== 0)) full.push(r);
+    if (full.length) {
+      const remaining = this.board.filter((_, r) => !full.includes(r)).map(row => row.slice());
+      for (let r = 0; r < ROWS; r++) this.board[r] = r < full.length ? new Array(COLS).fill(0) : remaining[r - full.length];
+      const points = LINE_SCORES[full.length] * this.level;
+      this.score += points;
+      this.lines += full.length;
+      const newLevel = 1 + Math.floor(this.lines / 10);
+      if (this.listener && this.listener.onLinesCleared) this.listener.onLinesCleared(full.length, points);
+      if (newLevel > this.level) { this.level = newLevel; if (this.listener && this.listener.onLevelUp) this.listener.onLevelUp(this.level); }
+    }
+    this.canHold = true;
+    this.spawn(this.nextFromQueue());
+  }
+  gameOver() {
+    this.state = 'GAME_OVER'; this.softDropping = false;
+    if (this.listener && this.listener.onGameOver) this.listener.onGameOver();
+  }
+}
+
+/* The eight tests of TetrisGameTest.kt, ported. Each returns true or throws. */
+function engineTests() {
+  const eq = (a, b, m) => { if (a !== b) throw new Error(m + ': expected ' + b + ', got ' + a); };
+  const ok = (c, m) => { if (!c) throw new Error(m); };
+  const setKey = cs => cs.map(c => c.x + ',' + c.y).sort().join(' ');
+  const fresh = () => { const g = new TetrisGame(); g.start(); return g; };
+  return [
+    ['rotationsReturnToSpawnAfterFourTurns', () => {
+      for (const t of Tetromino) {
+        const fifth = t.rotations[3].map(c => ({ x: t.size - 1 - c.y, y: c.x }));
+        eq(setKey(fifth), setKey(t.rotations[0]), t.name + ' fifth turn');
+        t.rotations.forEach(r => eq(r.length, 4, 'cells'));
+      }
+      eq(setKey(T_.T.rotations[1]), setKey(cellsOf(1, 0, 1, 1, 2, 1, 1, 2)), 'T right');
+    }],
+    ['firstSevenPiecesAreOneOfEach', () => {
+      const g = fresh(), seen = new Set();
+      for (let i = 0; i < 7; i++) { seen.add(g.current.type.name); g.hardDrop(); g.board.forEach(r => r.fill(0)); }
+      eq(seen.size, 7, 'distinct pieces');
+    }],
+    ['hardDropLandsOnFloorAndScores', () => {
+      const g = fresh(); g.spawn(T_.O); g.hardDrop();
+      ok(g.board[19][4] && g.board[19][5] && g.board[18][4] && g.board[18][5], 'O on floor');
+      eq(g.score, 36, 'score');
+    }],
+    ['clearingFourLinesScoresTetris', () => {
+      const g = fresh();
+      for (let r = 16; r <= 19; r++) for (let c = 0; c < COLS; c++) if (c !== 9) g.board[r][c] = 1;
+      g.spawn(T_.I); ok(g.rotate(1), 'rotate');
+      for (let i = 0; i < 4; i++) g.move(1);
+      const dropStart = g.current.y; g.hardDrop();
+      eq(g.lines, 4, 'lines'); eq(g.score, 800 + 2 * (16 - dropStart), 'score');
+      ok(g.board.every(r => r.every(v => v === 0)), 'empty board');
+    }],
+    ['wallKickLetsIPieceRotateAgainstWall', () => {
+      const g = fresh(); g.spawn(T_.I); g.rotate(1);
+      for (let i = 0; i < 5; i++) g.move(-1);
+      eq(Math.min(...g.cellsOf(g.current).map(c => c.x)), 0, 'at wall');
+      ok(g.rotate(1), 'rotate'); ok(g.cellsOf(g.current).every(c => c.x >= 0 && c.x < COLS), 'inside');
+    }],
+    ['holdIsAllowedOncePerPiece', () => {
+      const g = fresh(), first = g.current.type;
+      ok(g.hold(), 'hold'); eq(g.held, first, 'held'); ok(!g.hold(), 'second hold refused');
+      g.hardDrop(); ok(g.canHold, 'canHold');
+    }],
+    ['pieceLocksAfterGravityAndLockDelay', () => {
+      const g = fresh(); g.spawn(T_.O);
+      for (let i = 0; i < 400; i++) g.update(50);
+      ok(g.current !== null, 'next piece'); ok(g.board[19][4] !== 0, 'locked');
+    }],
+    ['stackingToTheTopEndsTheGame', () => {
+      const g = fresh();
+      for (let i = 0; i < 60; i++) if (g.state === 'PLAYING') g.hardDrop();
+      eq(g.state, 'GAME_OVER', 'state');
+    }],
+  ];
+}
+
+if (typeof module !== 'undefined') module.exports = { TetrisGame, Tetromino, T_, JLSTZ_KICKS, I_KICKS, engineTests, COLS, ROWS, cellsOf };
+
+</script>
+<script>
+(function () {
+'use strict';
+const $ = s => document.querySelector(s);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+
+/* Theme toggle */
+(function () {
+  const root = document.documentElement, saved = store.get('tetris.theme');
+  if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
+  $('#themeBtn').addEventListener('click', () => {
+    const cur = root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next; store.set('tetris.theme', next);
+  });
+})();
+
+/* Kotlin excerpts: line numbers + light highlighting */
+document.querySelectorAll('pre.code').forEach(pre => {
+  const start = +(pre.dataset.start || 0), nonum = pre.classList.contains('nonum');
+  const kw = /\b(fun|val|var|if|else|return|for|in|while|private|internal|enum|class|step|until|true|false|null)\b/g;
+  pre.innerHTML = pre.textContent.split('\n').map((line, i) => {
+    let esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let code = esc, com = '';
+    const ci = esc.search(/\/\/|#\s/);
+    if (ci >= 0) { code = esc.slice(0, ci); com = '<span class="c">' + esc.slice(ci) + '</span>'; }
+    if (!nonum) code = code.replace(kw, '<span class="k">$1</span>').replace(/\b(0x[0-9A-F]+|\d+(?:\.\d+)?f?)\b/g, '<span class="n">$1</span>');
+    return '<span class="ln" data-n="' + (nonum ? '$' : start + i) + '">' + code + com + '</span>';
+  }).join('');
+});
+
+/* Block drawing, ported from TetrisView.drawBlock / drawGhost */
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function shade(h, f) { const [r, g, b] = hexToRgb(h); return 'rgb(' + (r * f | 0) + ',' + (g * f | 0) + ',' + (b * f | 0) + ')'; }
+function rgba(h, a) { const [r, g, b] = hexToRgb(h); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; }
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+function drawBlock(ctx, left, top, size, color) {
+  const inset = Math.max(1, size * 0.05), radius = size * 0.14;
+  let l = left + inset, t = top + inset, r = left + size - inset, b = top + size - inset;
+  ctx.fillStyle = shade(color, 0.62); rrect(ctx, l, t, r - l, b - t, radius); ctx.fill();
+  const bevel = size * 0.13;
+  l += bevel * 0.6; t += bevel * 0.6; r -= bevel; b -= bevel;
+  ctx.fillStyle = color; rrect(ctx, l, t, r - l, b - t, radius * 0.7); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(l + bevel, t + bevel * 0.4, bevel * 1.2, bevel * 1.2);
+}
+function drawGhost(ctx, left, top, cell, color) {
+  const inset = Math.max(1.5, cell * 0.08), s = cell - 2 * inset;
+  ctx.fillStyle = rgba(color, 0x22 / 255); rrect(ctx, left + inset, top + inset, s, s, cell * 0.12); ctx.fill();
+  ctx.strokeStyle = rgba(color, 0x99 / 255); ctx.lineWidth = Math.max(1.5, cell * 0.06); ctx.stroke();
+}
+const C = { BG_TOP: '#0B0D14', BG_BOTTOM: '#161B2B', BOARD_BG: '#10131C', GRID: '#1B2030', PANEL_BG: '#141927', PANEL_EDGE: '#262D40', LABEL: '#8B93A7', VALUE: '#F1F5F9', DISABLED: '#4B5263', BUTTON: '#1A2032', BUTTON_PRESSED: '#3A4566', BUTTON_EDGE: '#2C3550', ICON: '#E5E7EB', POPUP: '#FACC15', OVERLAY: 'rgba(11,13,20,0.85)' };
+const FONT = '"Instrument Sans", "Helvetica Neue", Arial, sans-serif';
+
+/* Small SVG of a piece in spawn or any rotation */
+function pieceSVG(type, rot, pad) {
+  const cells = type.rotations[rot || 0], s = type.size, p = pad == null ? 0.15 : pad;
+  if (pad === 'tight') {
+    const xs = cells.map(c => c.x), ys = cells.map(c => c.y), mx = Math.min(...xs), my = Math.min(...ys);
+    const w = Math.max(...xs) - mx + 1, h = Math.max(...ys) - my + 1;
+    return '<svg viewBox="-.1 -.1 ' + (w + .2) + ' ' + (h + .2) + '" aria-hidden="true">' + cells.map(c => '<rect x="' + (c.x - mx + .06) + '" y="' + (c.y - my + .06) + '" width=".88" height=".88" rx=".14" fill="' + type.color + '"/>').join('') + '</svg>';
+  }
+  let out = '<svg viewBox="0 0 ' + s + ' ' + s + '" aria-hidden="true"><rect x="0" y="0" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width=".04" stroke-dasharray=".12 .12"/>';
+  for (let i = 1; i < s; i++) out += '<path d="M' + i + ' 0V' + s + 'M0 ' + i + 'H' + s + '" stroke="currentColor" stroke-opacity=".12" stroke-width=".03"/>';
+  out += cells.map(c => '<rect x="' + (c.x + .06) + '" y="' + (c.y + .06) + '" width=".88" height=".88" rx=".14" fill="' + type.color + '"/>').join('');
+  return out + '</svg>';
+}
+
+/* Rotation sheet */
+(function () {
+  const g = $('#rotgrid'); let html = '<span></span>' + ['0', 'R', '2', 'L'].map(h => '<span class="hd">' + h + '</span>').join('');
+  for (const t of Tetromino) { html += '<span class="pn">' + t.name + '</span>'; for (let r = 0; r < 4; r++) html += '<span>' + pieceSVG(t, r) + '</span>'; }
+  g.innerHTML = html;
+})();
+
+/* Kick tables */
+(function () {
+  const names = ['0', 'R', '2', 'L'], order = [[0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2], [3, 0], [0, 3]];
+  const tbl = $('#kickTable');
+  function render(which) {
+    const tb = which === 'I' ? I_KICKS : JLSTZ_KICKS;
+    let h = '<caption class="sr">SRS wall kick offsets for ' + which + '</caption><thead><tr><th>Turn</th>' + [1, 2, 3, 4, 5].map(n => '<th>Test ' + n + '</th>').join('') + '</tr></thead><tbody>';
+    for (const [f, t] of order) {
+      const k = tb[f * 4 + t];
+      h += '<tr><td>' + names[f] + ' → ' + names[t] + '</td>';
+      for (let i = 0; i < 10; i += 2) h += '<td>(' + fmt(k[i]) + ', ' + fmt(k[i + 1]) + ')</td>';
+      h += '</tr>';
+    }
+    tbl.innerHTML = h + '</tbody>';
+  }
+  const fmt = n => n > 0 ? '+' + n : n < 0 ? '−' + (-n) : '0';
+  document.querySelectorAll('[data-kt]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-kt]').forEach(o => o.setAttribute('aria-pressed', o === b));
+    render(b.dataset.kt);
+  }));
+  render('JLSTZ');
+})();
+
+/* Kick lab */
+(function () {
+  const cv = $('#labCanvas'), ctx = cv.getContext('2d'), FIRST = 12, VIS = 8;
+  const names = ['0', 'R', '2', 'L'];
+  const SC = {
+    tsd: { rows: ['..........', '..........', '..........', '.XXX......', '..........', 'X.........', 'X..XXXXXXX', 'XX.XXXXXXX'], piece: ['T', 0, 15, 2],
+      note: 'The T has slid left under the overhang, pointing down. Rotate clockwise (2 → L): tests 1 to 4 are blocked, test 5 moves it one column right and two rows down into the slot, filling two rows.' },
+    wall: { rows: ['..........', '..........', '..........', '..........', '..........', '..........', '..........', '..........'], piece: ['I', -2, 12, 1],
+      note: 'The unit test wallKickLetsIPieceRotateAgainstWall: a vertical I pushed against the left wall. Rotate clockwise (R → 2): the first two offsets put cells outside the board, the third shifts it two columns right.' }
+  };
+  let g, sc = 'tsd', last = null;
+  function load(name) {
+    sc = name; last = null;
+    g = new TetrisGame(); g.start();
+    g.board.forEach(r => r.fill(0));
+    SC[name].rows.forEach((s, i) => [...s].forEach((ch, c) => { g.board[FIRST + i][c] = ch === 'X' ? 8 : 0; }));
+    const [t, x, y, r] = SC[name].piece;
+    g.current = { type: T_[t], x, y, rotation: r };
+    g.onKick = k => { last = k; };
+    $('#labNote').textContent = SC[name].note;
+    render();
+  }
+  function render() {
+    const w = cv.clientWidth || 280, dpr = window.devicePixelRatio || 1, cell = w / 10, h = cell * VIS;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = C.BOARD_BG; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = C.GRID; ctx.lineWidth = 1; ctx.beginPath();
+    for (let c = 1; c < 10; c++) { ctx.moveTo(c * cell, 0); ctx.lineTo(c * cell, h); }
+    for (let r = 1; r < VIS; r++) { ctx.moveTo(0, r * cell); ctx.lineTo(w, r * cell); }
+    ctx.stroke();
+    for (let r = 0; r < VIS; r++) for (let c = 0; c < 10; c++) if (g.board[FIRST + r][c]) drawBlock(ctx, c * cell, r * cell, cell, '#5b6478');
+    const p = g.current;
+    for (const c of g.cellsOf(p)) if (c.y >= FIRST) drawBlock(ctx, c.x * cell, (c.y - FIRST) * cell, cell, p.type.color);
+    const log = $('#labLog');
+    if (last) {
+      let found = false;
+      log.innerHTML = last.tried.map((t, i) => '<li class="' + (t.ok ? 'ok' : 'no') + '"><span>Test ' + (i + 1) + '</span><span>(' + f(t.kx) + ', ' + f(t.ky) + ')</span><span class="res">' + (t.ok ? 'fits, rotated' : 'blocked') + '</span></li>').join('') +
+        (last.tried.length < 5 && last.tried[last.tried.length - 1].ok ? '<li class="dim"><span>' + (5 - last.tried.length) + ' more</span><span></span><span class="res">not needed</span></li>' : '');
+      if (!last.tried.some(t => t.ok)) log.innerHTML += '<li class="no"><span>Result</span><span></span><span class="res">rotation refused</span></li>';
+    } else log.innerHTML = '<li class="dim"><span>Log</span><span></span><span class="res">rotate to see the tests</span></li>';
+    const b = g.board.map(r => r.slice()); g.cellsOf(p).forEach(c => { if (c.y >= 0) b[c.y][c.x] = 1; });
+    const full = b.filter(r => r.every(v => v)).length;
+    $('#labState').textContent = p.type.name + ' in state ' + names[p.rotation] + ' at x = ' + p.x + ', y = ' + p.y + (last ? ', turn ' + names[last.from] + ' → ' + names[last.to] : '') + '. Rows full if it locked here: ' + full + '.';
+  }
+  const f = n => n > 0 ? '+' + n : n < 0 ? '−' + (-n) : '0';
+  document.querySelectorAll('[data-la]').forEach(b => b.addEventListener('click', () => {
+    const a = b.dataset.la;
+    if (a === 'RESET') return load(sc);
+    if (a === 'L') g.move(-1); else if (a === 'R') g.move(1); else if (a === 'D') g.softStep();
+    else { last = null; g.rotate(a === 'CW' ? 1 : -1); }
+    render();
+  }));
+  document.querySelectorAll('[data-sc]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-sc]').forEach(o => o.setAttribute('aria-pressed', o === b));
+    load(b.dataset.sc);
+  }));
+  load('tsd');
+  if ('ResizeObserver' in window) new ResizeObserver(() => render()).observe(cv);
+})();
+
+/* 7-bag */
+(function () {
+  function deal() {
+    const g = new TetrisGame(), seq = [];
+    for (let i = 0; i < 28; i++) seq.push(g.nextFromQueue());
+    let html = '';
+    for (let b = 0; b < 4; b++) {
+      html += '<div class="bagrow"><span class="lbl">bag ' + (b + 1) + '</span>' + seq.slice(b * 7, b * 7 + 7).map(t => '<span class="pc" title="' + t.name + '">' + pieceSVG(t, 0, 'tight') + '<span class="sr">' + t.name + '</span></span>').join('') + '</div>';
+    }
+    $('#bagView').innerHTML = html;
+    let worst = 0, which = '';
+    for (const t of Tetromino) {
+      const idx = seq.map((s, i) => s === t ? i : -1).filter(i => i >= 0);
+      for (let i = 1; i < idx.length; i++) if (idx[i] - idx[i - 1] - 1 > worst) { worst = idx[i] - idx[i - 1] - 1; which = t.name; }
+    }
+    $('#bagStat').textContent = 'Most pieces between two of the same kind in this deal: ' + worst + ' (' + which + ').';
+  }
+  $('#dealBtn').addEventListener('click', deal); deal();
+})();
+
+/* Gravity chart */
+(function () {
+  const g = new TetrisGame(), data = [];
+  for (let l = 1; l <= 20; l++) { g.level = l; const gv = g.gravityIntervalMs(); data.push({ l, gv, sd: Math.min(gv, Math.max(gv / 20, 16)) }); }
+  const W = 560, H = 280, L = 40, B = 24, T = 6, pw = W - L - 4, ph = H - B - T;
+  const y = v => T + ph - (Math.log10(v) / 3) * ph, bw = pw / 20;
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Bar chart, logarithmic scale: gravity interval falls from 1000 ms at level 1 to 1 ms at level 19 and 20; soft drop interval is 50 ms at level 1 and 16 ms from level 6 to 13.">';
+  for (const v of [1, 10, 100, 1000]) s += '<line class="gl" x1="' + L + '" x2="' + W + '" y1="' + y(v) + '" y2="' + y(v) + '"/><text class="ax" x="' + (L - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + v + '</text>';
+  const bar = (x, w, v, cls) => { const top = y(v), base = T + ph, h = Math.max(base - top, 1.5), r = Math.min(3, w / 2, h); return '<path class="bar ' + cls + '" d="M' + x + ' ' + base + 'V' + (top + r) + 'q0 ' + (-r) + ' ' + r + ' ' + (-r) + 'H' + (x + w - r) + 'q' + r + ' 0 ' + r + ' ' + r + 'V' + base + 'z"/>'; };
+  data.forEach((d, i) => {
+    const x0 = L + i * bw + 3, w = (bw - 8) / 2;
+    s += '<g data-i="' + i + '"><rect class="hit" x="' + (L + i * bw) + '" y="' + T + '" width="' + bw + '" height="' + ph + '"/>' + bar(x0, w, Math.max(d.gv, 1), '') + bar(x0 + w + 2, w, Math.max(d.sd, 1), 'soft') + '</g>';
+    if (i % 2 === 0 || i === 19) s += '<text class="ax" x="' + (L + i * bw + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + d.l + '</text>';
+  });
+  s += '<text class="ax" x="' + L + '" y="' + (H + 12) + '">level →</text></svg>';
+  const box = $('#gravChart'), tip = $('#gravTip');
+  box.insertAdjacentHTML('beforeend', s);
+  box.querySelectorAll('g[data-i]').forEach(gr => {
+    const show = () => {
+      const d = data[+gr.dataset.i], r = gr.getBoundingClientRect(), br = box.getBoundingClientRect();
+      tip.textContent = 'Level ' + d.l + ': ' + fmt(d.gv) + ' ms/row, soft drop ' + fmt(d.sd) + ' ms';
+      tip.style.left = Math.min(Math.max(r.left - br.left + r.width / 2, 120), br.width - 120) + 'px'; tip.style.top = (r.top - br.top + 30) + 'px'; tip.style.opacity = 1;
+      gr.classList.add('on');
+    };
+    const hide = () => { tip.style.opacity = 0; gr.classList.remove('on'); };
+    gr.addEventListener('pointerenter', show); gr.addEventListener('pointerleave', hide);
+  });
+  const fmt = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
+  $('#gravTable').innerHTML += '<thead><tr><th>Level</th><th class="num">Gravity, ms/row</th><th class="num">Soft drop, ms/row</th></tr></thead><tbody>' + data.map(d => '<tr><td>' + d.l + '</td><td class="num">' + fmt(d.gv) + '</td><td class="num">' + fmt(d.sd) + '</td></tr>').join('') + '</tbody>';
+})();
+
+/* Tests */
+(function () {
+  const tests = engineTests(), list = $('#testList');
+  list.innerHTML = tests.map(([n], i) => '<li><span class="n">' + (i + 1) + '</span><code>' + n + '</code><span class="r" id="tr' + i + '">JUnit: pass</span></li>').join('');
+  $('#runTests').addEventListener('click', () => {
+    let pass = 0; const t0 = performance.now();
+    tests.forEach(([n, f], i) => {
+      const el = $('#tr' + i);
+      try { f(); el.textContent = 'JS: pass'; el.className = 'r pass'; pass++; } catch (e) { el.textContent = 'JS: fail'; el.className = 'r fail'; el.title = e.message; }
+    });
+    $('#testStat').textContent = pass + ' of ' + tests.length + ' passed in ' + (performance.now() - t0).toFixed(1) + ' ms, with a fresh random seed each run.';
+  });
+})();
+
+/* The playable game: port of TetrisView */
+(function () {
+  const dev = $('#device'), cv = $('#game'), ctx = cv.getContext('2d'), live = $('#gameLive');
+  const game = new TetrisGame();
+  const PANEL_CELLS = 3.6, NEXT_SLOT_CELLS = 2.3, DAS_MS = 170, ARR_MS = 50, TAP_MS = 250, FLING = 1200, RESTART_GUARD_MS = 700, POPUP_MS = 1100, SLOP = 8;
+  const LINE_NAMES = ['', 'Single', 'Double', 'Triple', 'TETRIS!'];
+  let highScore = +(store.get('tetris.best') || 0), newRecord = false, gameOverAt = 0;
+  let popupTitle = null, popupSub = null, popupMs = 0;
+  let W = 0, H = 0, cell = 0;
+  const board = {}, holdBox = {}, nextBox = {}, stats = {}, pauseBtn = {};
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  game.listener = {
+    onLinesCleared(count, points) { popupTitle = LINE_NAMES[count]; popupSub = '+' + points; popupMs = POPUP_MS; live.textContent = LINE_NAMES[count] + ', ' + points + ' points'; },
+    onLevelUp(level) { popupSub = 'Level ' + level; },
+    onGameOver() {
+      releaseAll(); gameOverAt = performance.now();
+      newRecord = game.score > highScore;
+      if (newRecord) { highScore = game.score; store.set('tetris.best', String(highScore)); }
+      live.textContent = 'Game over. Score ' + game.score;
+    }
+  };
+
+  function layout() {
+    const w = Math.round(dev.clientWidth);
+    if (!w) return;
+    const pad = 12, gap = 8, availW = w - 2 * pad;
+    cell = Math.floor((availW - 2 * gap) / (10 + 2 * PANEL_CELLS));
+    const boardW = cell * 10, boardH = cell * 20, panelW = cell * PANEL_CELLS, totalW = boardW + 2 * (panelW + gap);
+    W = w; H = boardH + 2 * pad;
+    const bl = pad + (availW - totalW) / 2 + panelW + gap;
+    Object.assign(board, { l: bl, t: pad, r: bl + boardW, b: pad + boardH, w: boardW, h: boardH });
+    const labelH = cell * 0.9, lp = board.l - gap - panelW, rp = board.r + gap;
+    Object.assign(holdBox, { l: lp, t: board.t + labelH, r: lp + panelW, b: board.t + labelH + cell * 3 });
+    Object.assign(stats, { l: lp, t: holdBox.b + cell * 0.6, r: lp + panelW, b: board.b });
+    Object.assign(nextBox, { l: rp, t: board.t + labelH, r: rp + panelW, b: board.t + labelH + cell * (0.4 + NEXT_SLOT_CELLS * 3) });
+    const ps = Math.min(panelW * 0.6, 56);
+    Object.assign(pauseBtn, { l: rp + (panelW - ps) / 2, t: board.b - ps, r: rp + (panelW + ps) / 2, b: board.b });
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  const inside = (r, x, y, s) => x >= r.l - (s || 0) && x <= r.r + (s || 0) && y >= r.t - (s || 0) && y <= r.b + (s || 0);
+
+  /* Input state (pressed controls, auto-repeat, gesture) */
+  const pressed = new Map(); let repeatControl = null, repeatElapsed = 0, nextRepeatAt = 0;
+  let gp = null; // gesture pointer
+  function releaseAll() { pressed.clear(); repeatControl = null; gp = null; game.softDropping = false; syncButtons(); }
+  function syncButtons() {
+    const on = new Set(pressed.values());
+    document.querySelectorAll('#pad button').forEach(b => b.classList.toggle('on', on.has(b.dataset.c)));
+    dev.classList.toggle('live', game.state === 'PLAYING');
+  }
+  function startGame() { newRecord = false; popupMs = 0; releaseAll(); game.start(); syncButtons(); live.textContent = 'Game started'; }
+  function wake() { // pointer down while not PLAYING, as in pointerDown()
+    if (game.state === 'READY') startGame();
+    else if (game.state === 'PAUSED') { game.resume(); syncButtons(); }
+    else if (game.state === 'GAME_OVER' && performance.now() - gameOverAt > RESTART_GUARD_MS) startGame();
+  }
+  function pause() { if (game.state === 'PLAYING') { releaseAll(); game.pause(); syncButtons(); live.textContent = 'Paused'; } }
+  function press(c) {
+    switch (c) {
+      case 'HOLD': game.hold(); break;
+      case 'ROTATE_CCW': game.rotate(-1); break;
+      case 'ROTATE_CW': game.rotate(1); break;
+      case 'HARD_DROP': game.hardDrop(); break;
+      case 'SOFT_DROP': game.softDropping = true; break;
+      case 'LEFT': case 'RIGHT': game.move(c === 'LEFT' ? -1 : 1); repeatControl = c; repeatElapsed = 0; nextRepeatAt = DAS_MS; break;
+    }
+  }
+  function release(c) {
+    if (repeatControl === c) { const v = [...pressed.values()].filter(x => x === 'LEFT' || x === 'RIGHT'); repeatControl = v.length ? v[v.length - 1] : null; }
+    if (c === 'SOFT_DROP' && ![...pressed.values()].includes('SOFT_DROP')) game.softDropping = false;
+  }
+  function tickAutoRepeat(dt) {
+    if (!repeatControl) return;
+    repeatElapsed += dt;
+    while (repeatElapsed >= nextRepeatAt) { game.move(repeatControl === 'LEFT' ? -1 : 1); nextRepeatAt += ARR_MS; }
+  }
+
+  document.querySelectorAll('#pad button').forEach(b => {
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault(); dev.focus({ preventScroll: true });
+      if (game.state !== 'PLAYING') { wake(); return; }
+      try { b.setPointerCapture(e.pointerId); } catch (_) {}
+      pressed.set(e.pointerId, b.dataset.c); press(b.dataset.c); syncButtons();
+    });
+    const up = e => { const c = pressed.get(e.pointerId); if (c) { pressed.delete(e.pointerId); release(c); syncButtons(); } };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+    b.addEventListener('click', e => { if (e.detail === 0) { if (game.state !== 'PLAYING') wake(); else { press(b.dataset.c); release(b.dataset.c); } } }); // keyboard activation
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+
+  cv.addEventListener('pointerdown', e => {
+    dev.focus({ preventScroll: true });
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    if (game.state !== 'PLAYING') { wake(); return; }
+    if (inside(pauseBtn, x, y, 4)) { pause(); return; }
+    if (gp) return;
+    e.preventDefault();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    gp = { id: e.pointerId, sx: x, sy: y, ax: x, ay: y, t0: performance.now(), moved: false, samples: [{ t: performance.now(), x, y }] };
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!gp || e.pointerId !== gp.id) return;
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, now = performance.now();
+    gp.samples.push({ t: now, x, y }); while (gp.samples.length > 2 && now - gp.samples[0].t > 100) gp.samples.shift();
+    if (Math.abs(x - gp.sx) > SLOP || Math.abs(y - gp.sy) > SLOP) gp.moved = true;
+    while (x - gp.ax >= cell) { game.move(1); gp.ax += cell; }
+    while (gp.ax - x >= cell) { game.move(-1); gp.ax -= cell; }
+    while (y - gp.ay >= cell) { game.softStep(); gp.ay += cell; }
+    if (y < gp.ay) gp.ay = y;
+  });
+  function gestureEnd(e) {
+    if (!gp || e.pointerId !== gp.id) return;
+    const g = gp; gp = null;
+    if (game.state !== 'PLAYING' || e.type === 'pointercancel') return;
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, now = performance.now();
+    const s0 = g.samples[0], dt = Math.max(now - s0.t, 1) / 1000;
+    const vx = (x - s0.x) / dt, vy = (y - s0.y) / dt, vertical = Math.abs(vy) > Math.abs(vx) * 1.5;
+    if (vertical && vy > FLING) game.hardDrop();
+    else if (vertical && vy < -FLING && g.sy - y > cell) game.hold();
+    else if (!g.moved && now - g.t0 < TAP_MS) { if (inside(holdBox, x, y)) game.hold(); else game.rotate(1); }
+  }
+  cv.addEventListener('pointerup', gestureEnd); cv.addEventListener('pointercancel', gestureEnd);
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* Keyboard: only while the game area has focus (listener sits on the device, not the page) */
+  dev.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('#pad button') && (e.key === 'Enter' || e.key === ' ') && game.state === 'PLAYING') { /* let the button handle it */ }
+    if (game.state !== 'PLAYING') {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (game.state === 'PAUSED') { game.resume(); syncButtons(); } else if (game.state === 'READY' || performance.now() - gameOverAt > RESTART_GUARD_MS) startGame(); }
+      return;
+    }
+    let handled = true;
+    switch (e.key) {
+      case 'ArrowLeft': game.move(-1); break;
+      case 'ArrowRight': game.move(1); break;
+      case 'ArrowDown': game.softStep(); break;
+      case 'ArrowUp': case 'x': case 'X': game.rotate(1); break;
+      case 'z': case 'Z': game.rotate(-1); break;
+      case ' ': if (e.repeat) break; game.hardDrop(); break;
+      case 'c': case 'C': case 'Shift': game.hold(); break;
+      case 'p': case 'P': case 'Escape': pause(); break;
+      default: handled = false;
+    }
+    if (handled) { e.preventDefault(); e.stopPropagation(); }
+  });
+
+  /* Auto-pause: focus leaves the game, tab hidden, or board scrolled out of view (MainActivity.onPause) */
+  dev.addEventListener('focusout', e => { if (!dev.contains(e.relatedTarget)) pause(); });
+  window.addEventListener('blur', pause);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  let visible = true, raf = 0, lastT = 0;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(es => {
+      for (const en of es) {
+        if (en.intersectionRatio < 0.5) pause();
+        visible = en.isIntersecting; if (visible) loop(); else stop();
+      }
+    }, { threshold: [0, 0.5] }).observe(dev);
+  }
+
+  /* Frame loop (doFrame) */
+  function frame(t) {
+    raf = 0;
+    const dt = lastT ? Math.min(Math.max(t - lastT, 0), 100) : 0; lastT = t;
+    tickAutoRepeat(dt); game.update(dt);
+    if (popupMs > 0) popupMs -= dt;
+    if (dev.classList.contains('live') !== (game.state === 'PLAYING')) syncButtons();
+    draw();
+    if (visible) raf = requestAnimationFrame(frame);
+  }
+  function loop() { if (!raf) { lastT = 0; raf = requestAnimationFrame(frame); } }
+  function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+
+  /* Drawing (onDraw) */
+  function text(str, x, y, size, color, bold, spacing) {
+    ctx.font = (bold ? '700 ' : '400 ') + size + 'px ' + FONT; ctx.fillStyle = color; ctx.textAlign = 'center';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = spacing ? (size * spacing) + 'px' : '0px';
+    ctx.fillText(str, x, y);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  }
+  function fitted(str, x, y, size, maxW, color, bold) {
+    ctx.font = (bold ? '700 ' : '400 ') + size + 'px ' + FONT;
+    const w = ctx.measureText(str).width; if (w > maxW) size = size * maxW / w;
+    text(str, x, y, size, color, bold);
+  }
+  function panel(r, label) {
+    text(label, (r.l + r.r) / 2, r.t - cell * 0.28, cell * 0.45, C.LABEL, true, 0.12);
+    ctx.fillStyle = C.PANEL_BG; rrect(ctx, r.l, r.t, r.r - r.l, r.b - r.t, 8); ctx.fill();
+    ctx.strokeStyle = C.PANEL_EDGE; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  function mini(type, cx, cy, size, color) {
+    const cs = type.rotations[0], xs = cs.map(c => c.x), ys = cs.map(c => c.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const ox = cx - (maxX - minX + 1) * size / 2 - minX * size, oy = cy - (maxY - minY + 1) * size / 2 - minY * size;
+    for (const c of cs) drawBlock(ctx, ox + c.x * size, oy + c.y * size, size, color);
+  }
+  function draw() {
+    if (cell <= 0) return;
+    const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, C.BG_TOP); bg.addColorStop(1, C.BG_BOTTOM);
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    // board
+    ctx.fillStyle = C.BOARD_BG; rrect(ctx, board.l, board.t, board.w, board.h, 6); ctx.fill();
+    ctx.strokeStyle = C.GRID; ctx.lineWidth = 1; ctx.beginPath();
+    for (let c = 1; c < 10; c++) { const x = board.l + c * cell + .5; ctx.moveTo(x, board.t); ctx.lineTo(x, board.b); }
+    for (let r = 1; r < 20; r++) { const y = board.t + r * cell + .5; ctx.moveTo(board.l, y); ctx.lineTo(board.r, y); }
+    ctx.stroke();
+    for (let r = 0; r < 20; r++) for (let c = 0; c < 10; c++) { const v = game.board[r][c]; if (v) drawBlock(ctx, board.l + c * cell, board.t + r * cell, cell, Tetromino[v - 1].color); }
+    const p = game.current;
+    if (p) {
+      if (game.state === 'PLAYING' || game.state === 'PAUSED') {
+        const gy = game.ghostY();
+        for (const c of p.type.rotations[p.rotation]) if (gy + c.y >= 0) drawGhost(ctx, board.l + (p.x + c.x) * cell, board.t + (gy + c.y) * cell, cell, p.type.color);
+      }
+      ctx.save(); ctx.beginPath(); ctx.rect(board.l, board.t, board.w, board.h); ctx.clip();
+      for (const c of game.cellsOf(p)) drawBlock(ctx, board.l + c.x * cell, board.t + c.y * cell, cell, p.type.color);
+      ctx.restore();
+    }
+    // hold + stats
+    panel(holdBox, 'HOLD');
+    if (game.held) mini(game.held, (holdBox.l + holdBox.r) / 2, (holdBox.t + holdBox.b) / 2, cell * 0.55, game.canHold ? game.held.color : C.DISABLED);
+    const sx = (stats.l + stats.r) / 2, sw = (stats.r - stats.l) * 0.92;
+    let y = stats.t + cell * 0.6;
+    for (const [label, value] of [['SCORE', game.score], ['BEST', Math.max(highScore, game.score)], ['LEVEL', game.level], ['LINES', game.lines]]) {
+      text(label, sx, y, cell * 0.42, C.LABEL, true, 0.12);
+      fitted(String(value), sx, y + cell * 0.95, cell * 0.8, sw, C.VALUE, true);
+      y += cell * 1.9;
+    }
+    // next
+    panel(nextBox, 'NEXT');
+    game.nextPieces.forEach((t, i) => mini(t, (nextBox.l + nextBox.r) / 2, nextBox.t + cell * (0.2 + NEXT_SLOT_CELLS * (i + 0.5)), cell * (i === 0 ? 0.55 : 0.45), t.color));
+    // pause control (drawn on canvas, as in the app)
+    const pr = pauseBtn, pw = pr.r - pr.l;
+    ctx.fillStyle = C.BUTTON; rrect(ctx, pr.l, pr.t, pw, pr.b - pr.t, pw * 0.22); ctx.fill();
+    ctx.strokeStyle = C.BUTTON_EDGE; ctx.lineWidth = 1.5; ctx.stroke();
+    const cx = (pr.l + pr.r) / 2, cy = (pr.t + pr.b) / 2, s = pw * 0.32;
+    ctx.fillStyle = C.ICON; ctx.fillRect(cx - s * 0.5, cy - s * 0.6, s * 0.35, s * 1.2); ctx.fillRect(cx + s * 0.15, cy - s * 0.6, s * 0.35, s * 1.2);
+    // popup
+    if (popupTitle && popupMs > 0 && game.state === 'PLAYING') {
+      const a = Math.min(popupMs / 300, 1), rise = (1 - popupMs / POPUP_MS) * cell, py = board.t + board.h * 0.3 - rise;
+      ctx.globalAlpha = a;
+      fitted(popupTitle, (board.l + board.r) / 2, py, cell * 1.2, board.w * 0.9, C.POPUP, true);
+      if (popupSub) text(popupSub, (board.l + board.r) / 2, py + cell * 1.1, cell * 0.65, C.VALUE, true);
+      ctx.globalAlpha = 1;
+    }
+    overlay();
+  }
+  function overlay() {
+    let lines;
+    const start = finePointer ? 'Click or press Enter' : 'Tap to start';
+    if (game.state === 'PLAYING') return;
+    if (game.state === 'READY') lines = finePointer
+      ? [['TETRIS', 1.6], ['', 0.6], [start, 0.65], ['', 0.8], ['Arrows move', 0.45], ['Up / X / Z rotate', 0.45], ['Space drops', 0.45], ['C holds, P pauses', 0.45]]
+      : [['TETRIS', 1.6], ['', 0.6], [start, 0.65], ['', 0.8], ['Drag to move', 0.45], ['Tap to rotate', 0.45], ['Flick down to drop', 0.45], ['Flick up to hold', 0.45]];
+    else if (game.state === 'PAUSED') lines = [['Paused', 1.2], ['', 0.5], [finePointer ? 'Click or press Enter' : 'Tap to resume', 0.65]];
+    else lines = [['Game over', 1.2], ['', 0.4], ['Score ' + game.score, 0.7]].concat(newRecord ? [['New best!', 0.6]] : []).concat([['', 0.6], [finePointer ? 'Click to play again' : 'Tap to play again', 0.6]]);
+    ctx.fillStyle = C.OVERLAY; rrect(ctx, board.l, board.t, board.w, board.h, 6); ctx.fill();
+    const total = lines.reduce((s, l) => s + l[1] * cell * 1.35, 0);
+    let y = board.t + board.h / 2 - total / 2;
+    lines.forEach(([line, scale], i) => {
+      y += scale * cell * 1.35;
+      if (!line) return;
+      const bold = i === 0 || line === 'New best!';
+      const color = i === 0 ? C.VALUE : line === 'New best!' ? C.POPUP : scale < 0.5 ? C.LABEL : C.VALUE;
+      fitted(line, (board.l + board.r) / 2, y, scale * cell, board.w * 0.9, color, bold);
+    });
+  }
+
+  if ('ResizeObserver' in window) new ResizeObserver(layout).observe(dev); else window.addEventListener('resize', layout);
+  layout(); loop();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+})();
+})();
+</script>
+</body>
+</html>
